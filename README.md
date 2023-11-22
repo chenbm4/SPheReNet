@@ -33,6 +33,21 @@ python main.py --exp_name=exp2 --unseen=True
 
 python main.py --exp_name=exp3 --gaussian_noise=True
 
+## Posmap generation usage
+1. Clone the repository from face3d:
+   ```
+   git clone https://github.com/YadiraF/face3d
+   cd face3d
+   ```
+2. Put the script Generate_posmap_300WLP.py under the /examples directory of face3d repo
+3. Compile the c++ files and preparing BFM data as instructed in https://github.com/yfeng95/face3d
+4. Download the 300W_LP dataset from https://drive.google.com/file/d/0B7OEHD3T4eCkVGs0TkhUWFN6N1k/view?usp=sharing&resourcekey=0-WT5tO4TOCbNZY6r6z6WmOA, after unzipping, put under examples/Data directory of face3d
+5. Run dataset generation script:
+   ```
+   cd face3d/examples
+   python Generate_posmap_300WLP.py
+   ```
+   The dataset generated will be saved under examples/results directory. 
 ## Citation
 Please cite this paper if you want to use it in your work,
 
