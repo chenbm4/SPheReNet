@@ -26,7 +26,7 @@ def process_dataset(dataset_name):
                 base_name = input_file.rsplit('_facymap.jpg', 1)[0]
                 input_path = os.path.join(gt_dirs[dataset_name], base_name + '.jpg')
                 gt_path = find_gt_file(base_name, dataset_name)
-                file.write(f'{input_path}.jpg {gt_path}\n')
+                file.write(f'{input_path} {gt_path}\n')
 
 # Process each dataset
 for dataset_name in gt_dirs.keys():
