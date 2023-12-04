@@ -1,11 +1,10 @@
 import os
 
 # Paths to your directories
-# input_dir = '300W_LP_INPUT'
 gt_dirs = {
-    'AFW': 'AFW_GT',
-    'IBUG': 'IBUG_GT',
-    'LFPW': 'LFPW_GT'
+    'AFW': 'data/AFW_GT',
+    # 'IBUG': 'IBUG_GT',
+    # 'LFPW': 'LFPW_GT'
 }
 output_file = 'train_data_file.txt'
 
@@ -24,8 +23,9 @@ def process_dataset(dataset_name):
     with open(output_file, 'a') as file:
         for input_file in os.listdir(gt_dirs[dataset_name]):
             if input_file.endswith('_facymap.jpg'):
-                input_path = input_file.rsplit('_facymap.jpg', 1)[0]
-                gt_path = find_gt_file(input_file, dataset_name)
+                base_name = input_file.rsplit('_facymap.jpg', 1)[0]
+                input_path = os.path.join(gt_dirs[dataset_name], base_name + '.jpg')
+                gt_path = find_gt_file(base_name, dataset_name)
                 file.write(f'{input_path}.jpg {gt_path}\n')
 
 # Process each dataset
