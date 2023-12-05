@@ -139,8 +139,18 @@ def main(args):
             # Calculate the error (shape: [batch_size, 512, 512, 1])
             error = labels - predictions
 
+            # Convert weight_map to float32 and ensure it has the right shape
+            weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
+
+            # Expand dimensions of weight_map to match the batch size
+            weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
+            weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
+
+            # Apply the weight map to the error
+            weighted_error = error * weight_map_batch
+
             # Compute the mean squared error across spatial dimensions
-            mse = tf.reduce_mean(tf.square(error), axis=[1, 2, 3])  # Shape: [batch_size]
+            mse = tf.reduce_mean(tf.square(weighted_error), axis=[1, 2, 3])  # Shape: [batch_size]
 
             # Compute the mean of mse across the batch
             loss = tf.reduce_mean(mse)
@@ -153,10 +163,19 @@ def main(args):
     @tf.function
     def validation_step(images, labels):
         predictions = model(images, training=False)
-        # Calculate the mean squared error for each element
+        # Calculate the mean squared error for each element (shape: [batch_size, 512, 512, 1])
         mse = tf.square(labels - predictions)
-        # Apply the weight map
-        weighted_mse = mse * weight_map
+
+        # Convert weight_map to float32 and ensure it has the right shape
+        weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
+
+        # Expand dimensions of weight_map to match the batch size
+        weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
+        weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
+
+        # Apply the weight map to the mse
+        weighted_mse = mse * weight_map_batch
+
         # Calculate the mean over the batch
         v_loss = tf.reduce_mean(weighted_mse)
         return v_loss
