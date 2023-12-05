@@ -27,6 +27,11 @@ def main():
 
     # Load the model
     model = ResFcn256(256, 512)
+    
+    # Build the model by passing a dummy input
+    dummy_input = np.zeros((1, 256, 256, 3))  # Adjust the shape according to your model's input shape
+    model(dummy_input, training=False)
+
     model.load_weights(args.weights_path)  # Load the trained weights
 
     # Perform inference

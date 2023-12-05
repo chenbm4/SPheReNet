@@ -1,0 +1,2 @@
+model_checkpoint_path: "resfcn256"
+all_model_checkpoint_paths: "resfcn256"
