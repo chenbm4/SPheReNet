@@ -140,17 +140,17 @@ def main(args):
             error = labels - predictions
 
             # Convert weight_map to float32 and ensure it has the right shape
-            # weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
+            weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
 
             # Expand dimensions of weight_map to match the batch size
-            # weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
-            # weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
+            weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
+            weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
 
             # Apply the weight map to the error
-            # weighted_error = error * weight_map_batch
+            weighted_error = error * weight_map_batch
 
             # Compute the mean squared error across spatial dimensions
-            mse = tf.reduce_mean(tf.square(error), axis=[1, 2, 3])  # Shape: [batch_size]
+            mse = tf.reduce_mean(tf.square(weighted_error), axis=[1, 2, 3])  # Shape: [batch_size]
 
             # Compute the mean of mse across the batch
             loss = tf.reduce_mean(mse)
@@ -167,38 +167,49 @@ def main(args):
         mse = tf.square(labels - predictions)
 
         # Convert weight_map to float32 and ensure it has the right shape
-        # weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
+        weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
 
         # # Expand dimensions of weight_map to match the batch size
-        # weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
-        # weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
+        weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
+        weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
 
         # # Apply the weight map to the mse
-        # weighted_mse = mse * weight_map_batch
+        weighted_mse = mse * weight_map_batch
 
         # Calculate the mean over the batch
-        v_loss = tf.reduce_mean(mse)
+        v_loss = tf.reduce_mean(weighted_mse)
         return v_loss
 
+    best_val_loss = float('inf')
 
     # Training loop
     for epoch in range(args.epochs):
         epoch_loss_avg = tf.keras.metrics.Mean()
         epoch_val_loss_avg = tf.keras.metrics.Mean()
 
+        # Training step
         for _ in range(math.ceil(data.num_data / args.batch_size)):
             batch = data(args.batch_size)
             loss_value = train_step(batch[0], batch[1])
             epoch_loss_avg.update_state(loss_value)
 
+        # Validation step
         for _ in range(math.ceil(data.num_validation_data / args.batch_size)):
             val_batch = data(args.batch_size, is_validation=True)
             val_loss_value = validation_step(val_batch[0], val_batch[1])
             epoch_val_loss_avg.update_state(val_loss_value)
 
-        print(f"Epoch {epoch+1}, Loss: {epoch_loss_avg.result()}, Validation Loss: {epoch_val_loss_avg.result()}")
+        # Get the average losses
+        train_loss = epoch_loss_avg.result()
+        val_loss = epoch_val_loss_avg.result()
 
-        model.save_weights(checkpoint_path)
+        print(f"Epoch {epoch+1}, Loss: {train_loss}, Validation Loss: {val_loss}")
+
+        # Save model weights if validation loss improved
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            model.save_weights(checkpoint_path)
+            print(f"Saved improved model to {checkpoint_path}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spherical Position Map Regression Network for Accurate 3D Facial Geometry Estimation')
