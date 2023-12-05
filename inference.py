@@ -2,6 +2,7 @@ import argparse
 import tensorflow as tf
 import cv2
 import numpy as np
+import os
 from prnet import ResFcn256  # Import your model definition
 
 def preprocess_image(image_path):
@@ -34,8 +35,29 @@ def main():
 
     model.load_weights(args.weights_path)  # Load the trained weights
 
+    label = np.load(args.image_path + '.npz')[list(np.load(args.image_path + '.npz').keys())[0]
+    label = cv2.resize(label, (512, 512))  # Resize label to 512x512
+    label = label.reshape((512, 512, 1))
+    label_array = np.array(label, dtype=np.float32)
+    label_array = label_array / np.max(label_array)
+
+    # Load the weight map for the specific image
+    weight_map = cv2.imread("weighted_map.png", cv2.IMREAD_GRAYSCALE)
+    weight_map = cv2.resize(weight_map, (512, 512))
+    weight_map = np.expand_dims(weight_map, axis=-1)
+    weight_map = weight_map / np.max(weight_map)
+
     # Perform inference
     prediction = infer(model, args.image_path)
+
+    # Calculate the loss
+    mse = tf.square(label_array - prediction)
+    weight_map_float32 = tf.cast(weight_map, tf.float32)
+    weighted_mse = mse * weight_map_float32
+    loss = tf.reduce_mean(weighted_mse)
+
+    # Print the loss
+    print(f"Loss for the specific example: {loss.numpy()}")
 
     # Save prediction to file
     output_filename = args.image_path.rsplit('.', 1)[0] + '_prediction.npy'  # Creates a file name based on the image path
