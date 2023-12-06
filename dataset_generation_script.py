@@ -2,8 +2,8 @@ import os
 
 # Paths to your directories
 gt_dirs = {
-    'AFW': 'data/AFW_GT',
-    # 'IBUG': 'IBUG_GT',
+    # 'AFW': 'data/AFW_GT',
+    'IBUG': 'data/IBUG_GT',
     # 'LFPW': 'LFPW_GT'
 }
 output_file = 'train_data_file.txt'

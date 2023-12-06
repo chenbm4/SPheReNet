@@ -123,7 +123,7 @@ def main(args):
     best_checkpoint_path = os.path.join(args.checkpoint, 'best')
 
     # Load the weight map
-    weight_map = cv2.imread("weighted_map.png", cv2.IMREAD_GRAYSCALE)
+    weight_map = cv2.imread("model_config/weighted_map.png", cv2.IMREAD_GRAYSCALE)
     weight_map = cv2.resize(weight_map, (512, 512))
     weight_map = np.expand_dims(weight_map, axis=-1)
     weight_map = weight_map / np.max(weight_map)
@@ -264,7 +264,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spherical Position Map Regression Network for Accurate 3D Facial Geometry Estimation')
     parser.add_argument('--train_data_file', default='', type=str, help='The training data file')
     parser.add_argument('--learning_rate', default=0.0001, type=float, help='The learning rate')
-    parser.add_argument('--epochs', default=100, type=int, help='Total epochs')
+    parser.add_argument('--epochs', default=5, type=int, help='Total epochs')
     parser.add_argument('--batch_size', default=16, type=int, help='Batch sizes')
     parser.add_argument('--checkpoint', default='checkpoint/', type=str, help='The path of checkpoint')
     parser.add_argument('--model_path', default='checkpoint/resfcn256_weight', type=str, help='The path of pretrained model')
