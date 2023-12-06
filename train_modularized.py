@@ -7,7 +7,6 @@ import tensorflow as tf
 import cv2
 import optuna
 from prnet import ResFcn256
-from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import MeanSquaredError, MeanAbsoluteError
 
 
