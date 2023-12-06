@@ -106,11 +106,9 @@ def objective(trial, args):
         print(e)
         raise
     
-    args = {
-        'learning_rate': trial.suggest_loguniform('learning_rate', 1e-5, 1e-3),
-        'epochs': trial.suggest_int('epochs', 3, 10),
-        'batch_size': trial.suggest_categorical('batch_size', [32, 64, 128]),
-    }
+    args.learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-3)
+    args.epochs = trial.suggest_int('epochs', 3, 10)
+    args.batch_size = trial.suggest_categorical('batch_size', [32, 64, 128])
 
     # Load and prepare data
     data = TrainData(args.train_data_file, validation_split=0.2)
@@ -219,7 +217,7 @@ def objective(trial, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spherical Position Map Regression Network for Accurate 3D Facial Geometry Estimation')
-    parser.add_argument('--train_data_file', default='', type=str, help='The training data file')
+    parser.add_argument('--train_data_file', default='train_data_file.txt', type=str, help='The training data file')
     parser.add_argument('--learning_rate', default=0.0005, type=float, help='The learning rate')
     parser.add_argument('--epochs', default=5, type=int, help='Total epochs')
     parser.add_argument('--batch_size', default=64, type=int, help='Batch sizes')
