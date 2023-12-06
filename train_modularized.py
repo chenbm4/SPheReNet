@@ -127,14 +127,17 @@ def main(train_data_file, learning_rate, weight_map_path, batch_size, epochs, pa
     # Define model
     model = build_model()
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    weight_map = load_weight_map(weight_map_path)  # Assuming this function is defined elsewhere
+    weight_map = load_weight_map(weight_map_path)
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    model.compile(optimizer=optimizer, loss=lambda y_true, y_pred: weighted_mse(weight_map, y_true, y_pred))
 
     # Define custom early stopping callback
     early_stopping = EarlyStoppingCallback(patience=patience)
 
     # Define model checkpoint callback
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        os.path.join('checkpoints', 'ResFcn256_20231005', 'best_model.h5'),
+        os.path.join('checkpoints', 'ResFcn256_20231206', 'best_model.h5'),
         monitor='val_loss', save_best_only=True)
 
     # Define callbacks for model.fit
