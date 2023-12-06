@@ -1,0 +1,10 @@
+{
+    "train_data_file": "...",
+    "validation_split": 0.2,
+    "learning_rate": 0.0005,
+    "epochs": 20,
+    "batch_size": 64,
+    "checkpoint": "checkpoint/resfcn256",
+    "gpu": 0,
+    "weight_map_path": "model_config/weighted_map.png"
+}
