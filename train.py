@@ -65,8 +65,8 @@ class TrainData(object):
                 label = cv2.resize(label, (512, 512))  # Resize label to 512x512
                 label = label.reshape((512, 512, 1))  # Ensure single channel
 
-                img_array = np.array(img, dtype=np.float32) / 256.0 / 1.1
-                label_array = np.array(label, dtype=np.float32)
+                img_array = np.array(img, dtype=np.float64) / 256.0 / 1.1
+                label_array = np.array(label, dtype=np.float64)
                 label_array = label_array / np.max(label_array)  # Normalize to 0 to 1 values
 
                 imgs.append(img_array)
@@ -123,7 +123,7 @@ def main(args):
     best_checkpoint_path = os.path.join(args.checkpoint, 'best')
 
     # Load the weight map
-    weight_map = cv2.imread("model_config/weighted_map.png", cv2.IMREAD_GRAYSCALE)
+    weight_map = cv2.imread("weighted_map.png", cv2.IMREAD_GRAYSCALE)
     weight_map = cv2.resize(weight_map, (512, 512))
     weight_map = np.expand_dims(weight_map, axis=-1)
     weight_map = weight_map / np.max(weight_map)
@@ -140,11 +140,11 @@ def main(args):
             # Calculate the error (shape: [batch_size, 512, 512, 1])
             error = labels - predictions
 
-            # Convert weight_map to float32 and ensure it has the right shape
-            weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
+            # Convert weight_map to float64 and ensure it has the right shape
+            weight_map_float64 = tf.cast(weight_map, tf.float64)  # Shape: [512, 512, 1]
 
             # Expand dimensions of weight_map to match the batch size
-            weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
+            weight_map_expanded = tf.expand_dims(weight_map_float64, axis=0)  # Shape: [1, 512, 512, 1]
             weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
 
             # Apply the weight map to the error
@@ -167,11 +167,11 @@ def main(args):
         # Calculate the mean squared error for each element (shape: [batch_size, 512, 512, 1])
         mse = tf.square(labels - predictions)
 
-        # Convert weight_map to float32 and ensure it has the right shape
-        weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
+        # Convert weight_map to float64 and ensure it has the right shape
+        weight_map_float64 = tf.cast(weight_map, tf.float64)  # Shape: [512, 512, 1]
 
         # # Expand dimensions of weight_map to match the batch size
-        weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
+        weight_map_expanded = tf.expand_dims(weight_map_float64, axis=0)  # Shape: [1, 512, 512, 1]
         weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
 
         # # Apply the weight map to the mse
@@ -241,6 +241,10 @@ def main(args):
         model.save_weights(os.path.join(checkpoint_path, f'epoch_{epoch+1}'))
         print(f"Checkpoint saved at epoch {epoch+1}")
     
+    # Convert the loss history from NumPy float64 to native Python float
+    training_loss_history = [float(loss) for loss in training_loss_history]
+    validation_loss_history = [float(loss) for loss in validation_loss_history]
+
     # Save loss history to a file
     loss_history = {
         'training_loss': training_loss_history,
@@ -262,7 +266,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spherical Position Map Regression Network for Accurate 3D Facial Geometry Estimation')
-    parser.add_argument('--train_data_file', default='', type=str, help='The training data file')
+    parser.add_argument('--train_data_file', default='train_data_file.txt', type=str, help='The training data file')
     parser.add_argument('--learning_rate', default=0.0001, type=float, help='The learning rate')
     parser.add_argument('--epochs', default=5, type=int, help='Total epochs')
     parser.add_argument('--batch_size', default=16, type=int, help='Batch sizes')
