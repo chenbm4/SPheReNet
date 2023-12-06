@@ -126,7 +126,7 @@ def objective(trial, args):
     optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
 
     # Load the weight map
-    weight_map = cv2.imread("weighted_map.png", cv2.IMREAD_GRAYSCALE)
+    weight_map = cv2.imread("model_config/weighted_map.png", cv2.IMREAD_GRAYSCALE)
     weight_map = cv2.resize(weight_map, (512, 512))
     weight_map = np.expand_dims(weight_map, axis=-1)
     weight_map = weight_map / np.max(weight_map)
