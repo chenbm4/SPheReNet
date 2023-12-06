@@ -6,6 +6,8 @@ import cv2
 import random
 from prnet import ResFcn256 # Ensure this is compatible with TensorFlow 2.x
 import math
+import json
+import matplotlib.pyplot as plt
 from datetime import datetime
 
 class TrainData(object):
@@ -108,6 +110,7 @@ def main(args):
 
     # Load and prepare data
     data = TrainData(args.train_data_file, validation_split=args.validation_split)
+    print(f"Number of training data: {data.num_data}")
 
     # Build the model
     model = ResFcn256(256, 512)
@@ -117,9 +120,7 @@ def main(args):
     if os.path.exists(checkpoint_path):
         model.load_weights(checkpoint_path)
 
-    # Define the loss function and the optimizer
-    loss_object = tf.keras.losses.MeanSquaredError()
-    optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
+    best_checkpoint_path = os.path.join(args.checkpoint, 'best')
 
     # Load the weight map
     weight_map = cv2.imread("weighted_map.png", cv2.IMREAD_GRAYSCALE)
@@ -180,7 +181,22 @@ def main(args):
         v_loss = tf.reduce_mean(weighted_mse)
         return v_loss
 
+    # Early stopping setup
     best_val_loss = float('inf')
+    early_stopping_patience = 5
+    early_stopping_counter = 0
+
+    # Learning rate decay
+    initial_learning_rate = args.learning_rate
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate,
+        decay_steps=5*math.ceil(data.num_data / args.batch_size),
+        decay_rate=0.9,
+        staircase=True)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+
+    training_loss_history = []
+    validation_loss_history = []
 
     # Training loop
     for epoch in range(args.epochs):
@@ -205,18 +221,51 @@ def main(args):
 
         print(f"Epoch {epoch+1}, Loss: {train_loss}, Validation Loss: {val_loss}")
 
-        # Save model weights if validation loss improved
+        # Append losses to history lists
+        training_loss_history.append(train_loss.numpy())
+        validation_loss_history.append(val_loss.numpy())
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            model.save_weights(checkpoint_path)
-            print(f"Saved improved model to {checkpoint_path}")
+            early_stopping_counter = 0
+            model.save_weights(os.path.join(best_checkpoint_path, f'epoch_{epoch+1}'))
+            print(f"Improved Validation Loss: {val_loss}. Checkpoint saved at epoch {epoch+1}")
+        else:
+            early_stopping_counter += 1
+            print(f"No improvement in Validation Loss for {early_stopping_counter} epoch(s)")
+            if early_stopping_counter >= early_stopping_patience:
+                print("Early stopping triggered")
+                break
+
+        # Checkpointing every epoch
+        model.save_weights(os.path.join(checkpoint_path, f'epoch_{epoch+1}'))
+        print(f"Checkpoint saved at epoch {epoch+1}")
+    
+    # Save loss history to a file
+    loss_history = {
+        'training_loss': training_loss_history,
+        'validation_loss': validation_loss_history
+    }
+    with open('loss_history.json', 'w') as f:
+        json.dump(loss_history, f)
+    
+    # Plot loss history
+    plt.figure(figsize=(10, 5))
+    plt.plot(training_loss_history, label='Training Loss')
+    plt.plot(validation_loss_history, label='Validation Loss')
+    plt.title('Loss History')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig('loss_history_plot.png')
+    plt.show()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spherical Position Map Regression Network for Accurate 3D Facial Geometry Estimation')
     parser.add_argument('--train_data_file', default='', type=str, help='The training data file')
-    parser.add_argument('--learning_rate', default=0.0005, type=float, help='The learning rate')
-    parser.add_argument('--epochs', default=5, type=int, help='Total epochs')
-    parser.add_argument('--batch_size', default=64, type=int, help='Batch sizes')
+    parser.add_argument('--learning_rate', default=0.0001, type=float, help='The learning rate')
+    parser.add_argument('--epochs', default=100, type=int, help='Total epochs')
+    parser.add_argument('--batch_size', default=16, type=int, help='Batch sizes')
     parser.add_argument('--checkpoint', default='checkpoint/', type=str, help='The path of checkpoint')
     parser.add_argument('--model_path', default='checkpoint/resfcn256_weight', type=str, help='The path of pretrained model')
     parser.add_argument('--gpu', default='0', type=str, help='The GPU ID')
