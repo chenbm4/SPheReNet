@@ -119,23 +119,20 @@ class EarlyStoppingCallback(tf.keras.callbacks.Callback):
                 self.stopped_epoch = epoch
                 self.model.stop_training = True
 
-# Main Function
-def main(config_path, trial=None):
-    args = load_config(config_path)
-
+def main(train_data_file, learning_rate, weight_map_path, batch_size, epochs, patience, validation_split, trial=None):
     # Load data and split into train and validation sets
-    data = TrainData(args['train_data_file'])
-    X_train, X_val = train_test_split(data.train_data_list, test_size=args['validation_split'], random_state=42)
+    data = TrainData(train_data_file)
+    X_train, X_val = train_test_split(data.train_data_list, test_size=validation_split, random_state=42)
 
     # Define model
     model = build_model()
-    optimizer = tf.keras.optimizers.Adam(learning_rate=args['learning_rate'])
-    weight_map = load_weight_map(args['weight_map_path'])
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    weight_map = load_weight_map(weight_map_path)  # Assuming this function is defined elsewhere
 
     # Define custom early stopping callback
-    early_stopping = EarlyStoppingCallback(patience=args['patience'])
+    early_stopping = EarlyStoppingCallback(patience=patience)
 
-    # Define model checkpoint callback to save the best model
+    # Define model checkpoint callback
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join('checkpoints', 'ResFcn256_20231005', 'best_model.h5'),
         monitor='val_loss', save_best_only=True)
@@ -145,9 +142,9 @@ def main(config_path, trial=None):
 
     # Train the model using model.fit
     history = model.fit(
-        batch_size=args['batch_size'],
+        batch_size=batch_size,
         x=data,
-        epochs=args['epochs'],
+        epochs=epochs,
         validation_data=X_val,
         callbacks=callbacks,
         verbose=1)
@@ -155,5 +152,25 @@ def main(config_path, trial=None):
     # Return the best validation loss for Optuna optimization
     return min(history.history['val_loss'])
 
+def objective(trial):
+    # Define hyperparameters using Optuna
+    learning_rate = trial.suggest_loguniform('learning_rate', 1e-5, 1e-2)
+    batch_size = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
+    epochs = 200
+    patience = 10
+    validation_split = 0.2
+
+    # Assuming these paths are fixed for each trial
+    train_data_file = 'train_data_file.txt'
+    weight_map_path = 'model_config/weighted_map.png'
+
+    # Call the main function with the hyperparameters
+    val_loss = main(train_data_file, learning_rate, weight_map_path, batch_size, epochs, patience, validation_split, trial)
+
+    return val_loss
+
+
 if __name__ == '__main__':
-    main('model_config/config.json')
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=100)
+    print('Best trial:', study.best_trial.params)
