@@ -184,6 +184,8 @@ def objective(trial, args):
         return v_loss
 
     best_val_loss = float('inf')
+    no_improve_counter = 0
+    patience = 10
 
     # Training loop
     for epoch in range(args.epochs):
@@ -209,6 +211,20 @@ def objective(trial, args):
         print(f"Epoch {epoch+1}, Loss: {train_loss}, Validation Loss: {val_loss}")
         trial.report(val_loss, epoch)
 
+        # Early stopping check
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            no_improve_counter = 0
+            print(f"Epoch {epoch+1}, Improved Validation Loss: {best_val_loss}")
+        else:
+            no_improve_counter += 1
+            print(f"Epoch {epoch+1}, No Improvement in Validation Loss for {no_improve_counter} epochs")
+            if no_improve_counter >= patience:
+                print("Stopping early due to no improvement in validation loss")
+                break
+
+        # Optuna pruning
+        trial.report(val_loss, epoch)
         if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
 
