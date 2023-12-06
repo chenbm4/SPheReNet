@@ -130,9 +130,8 @@ def validation_step(model, weight_map, images, labels):
 # Training Loop
 def train_model(model, optimizer, weight_map, train_data, args, trial=None):
     best_val_loss = float('inf')
-
-    # Early stopping callback
-    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=args['patience'], restore_best_weights=True)
+    best_weights = None  # To store the best weights
+    wait = 0  # Counter for patience
 
     # Metrics for logging
     train_loss_results = []
@@ -168,20 +167,21 @@ def train_model(model, optimizer, weight_map, train_data, args, trial=None):
         train_loss_results.append(train_loss)
         val_loss_results.append(val_loss)
 
-        # Early Stopping Check
-        early_stopping_callback.on_epoch_end(epoch, logs={'val_loss': val_loss})
-        if early_stopping_callback.stopped_epoch > 0:
-            print(f"Early stopping triggered at epoch {epoch + 1}")
-            break
-
         # Optuna Pruning Check
         if trial and trial.should_prune():
             raise optuna.TrialPruned()
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            # Save the model weights manually
+            best_weights = model.get_weights()  # Save the best weights
+            wait = 0  # Reset the counter
             model.save_weights(os.path.join('checkpoints', 'ResFcn256_20231005', 'best_model.h5'))
+        else:
+            wait += 1
+            if wait >= args['patience']:
+                print(f"Early stopping triggered at epoch {epoch + 1}")
+                model.set_weights(best_weights)  # Restore the best weights
+                break
 
     return best_val_loss  # Return the best validation loss for Optuna optimization
 
