@@ -205,4 +205,4 @@ def load_weight_map(weight_map_path):
     return tf.cast(weight_map, tf.float32)
 
 if __name__ == '__main__':
-    main('config.json')
+    main('model_config/config.json')
