@@ -169,6 +169,13 @@ def objective(trial):
 
     return val_loss
 
+# Load Weight Map
+def load_weight_map(weight_map_path):
+    weight_map = cv2.imread(weight_map_path, cv2.IMREAD_GRAYSCALE)
+    weight_map = cv2.resize(weight_map, (512, 512))
+    weight_map = np.expand_dims(weight_map, axis=-1)
+    weight_map = weight_map / np.max(weight_map)
+    return tf.cast(weight_map, tf.float32)
 
 if __name__ == '__main__':
     study = optuna.create_study(direction='minimize')
