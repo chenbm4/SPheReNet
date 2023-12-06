@@ -1,5 +1,4 @@
 import os
-import math
 import random
 import json
 import numpy as np
@@ -8,7 +7,7 @@ import cv2
 import optuna
 from prnet import ResFcn256
 from tensorflow.keras.metrics import MeanSquaredError, MeanAbsoluteError
-
+from sklearn.model_selection import train_test_split
 
 # Configuration Management
 def load_config(config_path):
@@ -18,16 +17,12 @@ def load_config(config_path):
 
 # Data Handling Class
 class TrainData(object):
-    def __init__(self, train_data_file, validation_split=0.2):
+    def __init__(self, train_data_file):
         self.train_data_file = train_data_file
         self.train_data_list = []
-        self.validation_data_list = []
-        self.validation_split = validation_split
         self.index = 0
         self.num_data = 0
-        self.num_validation_data = 0
         self.readTrainData()
-        self.split_train_validation()
 
     def readTrainData(self):
         with open(self.train_data_file, 'r') as fp:
@@ -41,13 +36,6 @@ class TrainData(object):
 
             random.shuffle(self.train_data_list)
             self.num_data = len(self.train_data_list)
-
-    def split_train_validation(self):
-        num_validation = int(self.validation_split * self.num_data)
-        self.validation_data_list = self.train_data_list[:num_validation]
-        self.train_data_list = self.train_data_list[num_validation:]
-        self.num_validation_data = len(self.validation_data_list)
-        self.num_data = len(self.train_data_list)
 
     def getBatch(self, batch_list):
         imgs = []
@@ -84,15 +72,14 @@ class TrainData(object):
 
         return np.array(imgs), np.array(labels)
 
-    def __call__(self, batch_num, is_validation=False):
-        data_list = self.validation_data_list if is_validation else self.train_data_list
-        num_data = len(data_list)
+    def __call__(self, batch_num):
+        num_data = len(self.train_data_list)
 
         if (self.index + batch_num) > num_data:
             self.index = 0
-            random.shuffle(data_list)
+            random.shuffle(self.train_data_list)
 
-        batch_list = data_list[self.index:(self.index + batch_num)]
+        batch_list = self.train_data_list[self.index:(self.index + batch_num)]
         batch_data = self.getBatch(batch_list)
         self.index += batch_num
         return batch_data
@@ -109,99 +96,64 @@ def weighted_mse(weight_map, labels, predictions):
     mse = tf.reduce_mean(tf.square(weighted_error), axis=[1, 2, 3])
     return tf.reduce_mean(mse)
 
-# Training Step
-@tf.function
-def train_step(model, optimizer, weight_map, images, labels):
-    with tf.GradientTape() as tape:
-        predictions = model(images, training=True)
-        loss = weighted_mse(weight_map, labels, predictions)
-    gradients = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-    return loss
+# Custom Callback for Early Stopping
+class EarlyStoppingCallback(tf.keras.callbacks.Callback):
+    def __init__(self, patience):
+        super(EarlyStoppingCallback, self).__init__()
+        self.patience = patience
+        self.wait = 0
+        self.best_val_loss = float('inf')
+        self.best_weights = None
 
-# Validation Step
-@tf.function
-def validation_step(model, weight_map, images, labels):
-    predictions = model(images, training=False)
-    loss = weighted_mse(weight_map, labels, predictions)
-    return loss
-
-# Training Loop
-def train_model(model, optimizer, weight_map, train_data, args, trial=None):
-    best_val_loss = float('inf')
-    best_weights = None  # To store the best weights
-    wait = 0  # Counter for patience
-
-    # Metrics for logging
-    train_loss_results = []
-    val_loss_results = []
-    mse_metric = MeanSquaredError()
-    mae_metric = MeanAbsoluteError()
-
-    for epoch in range(args['epochs']):
-        epoch_loss_avg = tf.keras.metrics.Mean()
-        epoch_val_loss_avg = tf.keras.metrics.Mean()
-        mse_metric.reset_states()
-        mae_metric.reset_states()
-
-        for _ in range(math.ceil(train_data.num_data / args['batch_size'])):
-            batch = train_data(args['batch_size'])
-            loss_value = train_step(model, optimizer, weight_map, batch[0], batch[1])
-            epoch_loss_avg.update_state(loss_value)
-            mse_metric.update_state(batch[1], model(batch[0], training=True))
-            mae_metric.update_state(batch[1], model(batch[0], training=True))
-
-        for _ in range(math.ceil(train_data.num_validation_data / args['batch_size'])):
-            val_batch = train_data(args['batch_size'], is_validation=True)
-            val_loss_value = validation_step(model, weight_map, val_batch[0], val_batch[1])
-            epoch_val_loss_avg.update_state(val_loss_value)
-
-        train_loss = epoch_loss_avg.result()
-        val_loss = epoch_val_loss_avg.result()
-        train_mse = mse_metric.result()
-        train_mae = mae_metric.result()
-
-        print(f"Epoch {epoch+1}, Loss: {train_loss}, Validation Loss: {val_loss}, MSE: {train_mse}, MAE: {train_mae}")
-
-        train_loss_results.append(train_loss)
-        val_loss_results.append(val_loss)
-
-        # Optuna Pruning Check
-        if trial and trial.should_prune():
-            raise optuna.TrialPruned()
-
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_weights = model.get_weights()  # Save the best weights
-            wait = 0  # Reset the counter
-            model.save_weights(os.path.join('checkpoints', 'ResFcn256_20231005', 'best_model.h5'))
+    def on_epoch_end(self, epoch, logs=None):
+        val_loss = logs.get('val_loss')
+        if val_loss < self.best_val_loss:
+            self.best_val_loss = val_loss
+            self.best_weights = self.model.get_weights()
+            self.wait = 0
         else:
-            wait += 1
-            if wait >= args['patience']:
+            self.wait += 1
+            if self.wait >= self.patience:
                 print(f"Early stopping triggered at epoch {epoch + 1}")
-                model.set_weights(best_weights)  # Restore the best weights
-                break
-
-    return best_val_loss  # Return the best validation loss for Optuna optimization
+                self.model.set_weights(self.best_weights)
+                self.stopped_epoch = epoch
+                self.model.stop_training = True
 
 # Main Function
-def main(config_path):
+def main(config_path, trial=None):
     args = load_config(config_path)
-    data = TrainData(args['train_data_file'], args['validation_split'])
 
+    # Load data and split into train and validation sets
+    data = TrainData(args['train_data_file'])
+    X_train, X_val = train_test_split(data.train_data_list, test_size=args['validation_split'], random_state=42)
+
+    # Define model
     model = build_model()
     optimizer = tf.keras.optimizers.Adam(learning_rate=args['learning_rate'])
     weight_map = load_weight_map(args['weight_map_path'])
 
-    train_model(model, optimizer, weight_map, data, args)
+    # Define custom early stopping callback
+    early_stopping = EarlyStoppingCallback(patience=args['patience'])
 
-# Load Weight Map
-def load_weight_map(weight_map_path):
-    weight_map = cv2.imread(weight_map_path, cv2.IMREAD_GRAYSCALE)
-    weight_map = cv2.resize(weight_map, (512, 512))
-    weight_map = np.expand_dims(weight_map, axis=-1)
-    weight_map = weight_map / np.max(weight_map)
-    return tf.cast(weight_map, tf.float32)
+    # Define model checkpoint callback to save the best model
+    model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        os.path.join('checkpoints', 'ResFcn256_20231005', 'best_model.h5'),
+        monitor='val_loss', save_best_only=True)
+
+    # Define callbacks for model.fit
+    callbacks = [early_stopping, model_checkpoint]
+
+    # Train the model using model.fit
+    history = model.fit(
+        batch_size=args['batch_size'],
+        x=data,
+        epochs=args['epochs'],
+        validation_data=X_val,
+        callbacks=callbacks,
+        verbose=1)
+
+    # Return the best validation loss for Optuna optimization
+    return min(history.history['val_loss'])
 
 if __name__ == '__main__':
     main('model_config/config.json')
