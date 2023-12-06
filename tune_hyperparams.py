@@ -113,7 +113,7 @@ def objective(trial, args):
     }
 
     # Load and prepare data
-    data = TrainData(args.train_data_file, validation_split=0.2)
+    data = TrainData(args['train_data_file'], validation_split=0.2)
 
     # Build the model
     model = ResFcn256(256, 512)
