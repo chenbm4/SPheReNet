@@ -132,7 +132,7 @@ def train_model(model, optimizer, weight_map, train_data, args, trial=None):
     best_val_loss = float('inf')
 
     # Early stopping callback
-    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=args.patience, restore_best_weights=True)
+    early_stopping_callback = EarlyStopping(monitor='val_loss', patience=args['patience'], restore_best_weights=True)
 
     # Metrics for logging
     train_loss_results = []
@@ -140,21 +140,21 @@ def train_model(model, optimizer, weight_map, train_data, args, trial=None):
     mse_metric = MeanSquaredError()
     mae_metric = MeanAbsoluteError()
 
-    for epoch in range(args.epochs):
+    for epoch in range(args['epochs']):
         epoch_loss_avg = tf.keras.metrics.Mean()
         epoch_val_loss_avg = tf.keras.metrics.Mean()
         mse_metric.reset_states()
         mae_metric.reset_states()
 
-        for _ in range(math.ceil(train_data.num_data / args.batch_size)):
-            batch = train_data(args.batch_size)
+        for _ in range(math.ceil(train_data.num_data / args['batch_size'])):
+            batch = train_data(args['batch_size'])
             loss_value = train_step(model, optimizer, weight_map, batch[0], batch[1])
             epoch_loss_avg.update_state(loss_value)
             mse_metric.update_state(batch[1], model(batch[0], training=True))
             mae_metric.update_state(batch[1], model(batch[0], training=True))
 
-        for _ in range(math.ceil(train_data.num_validation_data / args.batch_size)):
-            val_batch = train_data(args.batch_size, is_validation=True)
+        for _ in range(math.ceil(train_data.num_validation_data / args['batch_size'])):
+            val_batch = train_data(args['batch_size'], is_validation=True)
             val_loss_value = validation_step(model, weight_map, val_batch[0], val_batch[1])
             epoch_val_loss_avg.update_state(val_loss_value)
 
