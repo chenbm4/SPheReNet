@@ -115,12 +115,15 @@ def main(args):
     # Build the model
     model = ResFcn256(256, 512)
 
-    # Load weights if they exist
-    checkpoint_path = os.path.join(args.checkpoint, 'resfcn256')
-    if os.path.exists(checkpoint_path):
-        model.load_weights(checkpoint_path)
-
     best_checkpoint_path = os.path.join(args.checkpoint, 'best')
+    recent_checkpoint_path = os.path.join(args.checkpoint, 'recent')
+
+    # Load weights if they exist
+    if os.path.exists(recent_checkpoint_path):
+        model.load_weights(recent_checkpoint_path)
+        print(f"Loaded weights from the most recent checkpoint: {recent_checkpoint_path}")
+    else:
+        print("No recent checkpoint found. Starting training from scratch.")
 
     # Load the weight map
     weight_map = cv2.imread("model_config/weighted_map.png", cv2.IMREAD_GRAYSCALE)
@@ -228,8 +231,8 @@ def main(args):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             early_stopping_counter = 0
-            model.save_weights(os.path.join(best_checkpoint_path, f'epoch_{epoch+1}'))
-            print(f"Improved Validation Loss: {val_loss}. Checkpoint saved at epoch {epoch+1}")
+            model.save_weights(os.path.join(best_checkpoint_path, 'best_model'))
+            print(f"Improved Validation Loss: {val_loss}. Best model checkpoint saved.")
         else:
             early_stopping_counter += 1
             print(f"No improvement in Validation Loss for {early_stopping_counter} epoch(s)")
@@ -238,31 +241,31 @@ def main(args):
                 break
 
         # Checkpointing every epoch
-        model.save_weights(os.path.join(checkpoint_path, f'epoch_{epoch+1}'))
-        print(f"Checkpoint saved at epoch {epoch+1}")
+        model.save_weights(os.path.join(recent_checkpoint_path, f'latest_model'))
+        print(f"Checkpoint for epoch {epoch+1} saved.")
     
-    # Convert the loss history from NumPy float32 to native Python float
-    training_loss_history = [float(loss) for loss in training_loss_history]
-    validation_loss_history = [float(loss) for loss in validation_loss_history]
+        # Convert the loss history from NumPy float32 to native Python float
+        training_loss_history = [float(loss) for loss in training_loss_history]
+        validation_loss_history = [float(loss) for loss in validation_loss_history]
 
-    # Save loss history to a file
-    loss_history = {
-        'training_loss': training_loss_history,
-        'validation_loss': validation_loss_history
-    }
-    with open('loss_history.json', 'w') as f:
-        json.dump(loss_history, f)
+        # Save loss history to a file
+        loss_history = {
+            'training_loss': training_loss_history,
+            'validation_loss': validation_loss_history
+        }
+        with open('loss_history.json', 'w') as f:
+            json.dump(loss_history, f)
     
-    # Plot loss history
-    plt.figure(figsize=(10, 5))
-    plt.plot(training_loss_history, label='Training Loss')
-    plt.plot(validation_loss_history, label='Validation Loss')
-    plt.title('Loss History')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.savefig('loss_history_plot.png')
-    plt.show()
+        # Plot loss history
+        plt.figure(figsize=(10, 5))
+        plt.plot(training_loss_history, label='Training Loss')
+        plt.plot(validation_loss_history, label='Validation Loss')
+        plt.title('Loss History')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.savefig('loss_history_plot.png')
+        plt.show()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spherical Position Map Regression Network for Accurate 3D Facial Geometry Estimation')
@@ -277,3 +280,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     main(args)
+    
