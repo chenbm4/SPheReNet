@@ -33,7 +33,11 @@ def main():
     dummy_input = np.zeros((1, 256, 256, 3))  # Adjust the shape according to your model's input shape
     model(dummy_input, training=False)
 
-    model.load_weights(args.weights_path)  # Load the trained weights
+    try:
+        model.load_weights(args.weights_path)
+        print("Weights loaded successfully.")
+    except Exception as e:
+        print("An error occurred while loading weights:", e)
 
     label = np.load(args.image_path + '.npz')[list(np.load(args.image_path + '.npz').keys())[0]]
     label = cv2.resize(label, (512, 512))  # Resize label to 512x512
