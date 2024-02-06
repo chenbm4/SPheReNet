@@ -20,7 +20,8 @@ def load_image_label(img_path, label_path):
             label = label_data[list(label_data.keys())[0]]
         label = cv2.resize(label, (512, 512))
         label = label.reshape((512, 512, 1))
-        label_array = np.array(label, dtype=np.float32) / np.max(label_array)
+        label_array = np.array(label, dtype=np.float32)
+        label_array = label_array / np.max(label_array)
 
         return img_array, label_array
     except Exception as e:
@@ -48,10 +49,28 @@ def create_error_mask(model, data):
     cv2.imwrite("error_mask.png", error_mask_normalized * 255)  # Save as an image
 
 if __name__ == '__main__':
-    model = ResFcn256(256, 512)
-    checkpoint_path = 'checkpoint/deep'
-    model.load_weights(checkpoint_path)
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if not gpus:
+        raise SystemError("GPU device not found")
+    print(f"GPUs available: {gpus}")
+
+    try:
+        # Set the GPU to be used
+        tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
+        tf.config.experimental.set_memory_growth(gpus[0], True)
+    except RuntimeError as e:
+        # Catch the runtime error if GPU setup fails
+        print(e)
+        raise
 
     data_file = 'train_data_file.txt'
     data = TrainData(data_file)
+    print(f"Number of training data: {data.num_data}")
+
+    model = ResFcn256(256, 512)
+    checkpoint_path = 'checkpoint/deep/recent/latest_model'
+    dummy_input = tf.random.normal([1, 256, 256, 3])  # Adjust the shape as per your model's input
+    model(dummy_input)
+    model.load_weights(checkpoint_path)
+
     create_error_mask(model, data)
