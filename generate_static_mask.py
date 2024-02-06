@@ -49,9 +49,9 @@ def create_error_mask(model, data):
 
 if __name__ == '__main__':
     model = ResFcn256(256, 512)
-    checkpoint_path = 'path_to_checkpoint'
+    checkpoint_path = 'checkpoint/deep'
     model.load_weights(checkpoint_path)
 
-    data_file = 'path_to_train_data_file'
+    data_file = 'train_data_file.txt'
     data = TrainData(data_file)
     create_error_mask(model, data)
