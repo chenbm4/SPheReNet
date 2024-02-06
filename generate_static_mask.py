@@ -41,6 +41,11 @@ def create_error_mask(model, data):
             continue
 
         prediction = model.predict(np.expand_dims(img, axis=0))
+
+        # Save model's output for each data item
+        output_filename = os.path.join("predictions", os.path.basename(img_path) + "_prediction.npz")
+        np.savez_compressed(output_filename, prediction)
+        
         error = np.abs(prediction[0] - label)
         error_accumulator += error.squeeze()
 
