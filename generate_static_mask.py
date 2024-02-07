@@ -29,7 +29,7 @@ def load_image_label(img_path, label_path):
         return None, None
 
 def create_error_mask(data):
-    error_accumulator = np.zeros((512, 512))  # Assuming labels are resized to 512x512
+    error_accumulator = np.zeros((512, 512))  # Full size
     prediction_count = 0
 
     for img_path, label_path in data.train_data_list:
@@ -43,10 +43,18 @@ def create_error_mask(data):
         if label is None:
             continue
 
-        prediction = np.load(prediction_file)['arr_0'][0]  # Load prediction
+        # Load prediction
+        prediction = np.load(prediction_file)['arr_0'][0]
 
-        error = np.abs(prediction - label)
-        error_accumulator += error.squeeze()
+        # Crop prediction and label
+        cropped_prediction = prediction[100:-50, 50:-50]
+        cropped_label = label[100:-50, 50:-50]
+
+        # Calculate error on cropped images
+        error = np.abs(cropped_prediction - cropped_label)
+
+        # Place cropped error into corresponding part of full-size accumulator
+        error_accumulator[100:-50, 50:-50] += error.squeeze()
         prediction_count += 1
 
     if prediction_count == 0:
@@ -54,7 +62,7 @@ def create_error_mask(data):
 
     error_mask = error_accumulator / prediction_count
     error_mask_normalized = error_mask / np.max(error_mask)
-    cv2.imwrite("error_mask.png", error_mask_normalized * 255)  # Save as an image
+    cv2.imwrite("error_mask.png", error_mask_normalized * 255)
 
 def load_label(label_path):
     try:
