@@ -9,6 +9,7 @@ import math
 import json
 import matplotlib.pyplot as plt
 from datetime import datetime
+from tqdm import tqdm
 
 class TrainData(object):
     def __init__(self, train_data_file, validation_split=0.2):
@@ -164,25 +165,48 @@ def main(args):
         return loss
 
 
-    @tf.function
+    # @tf.function
     def validation_step(images, labels):
         predictions = model(images, training=False)
-        # Calculate the mean squared error for each element (shape: [batch_size, 512, 512, 1])
-        mse = tf.square(labels - predictions)
 
-        # Convert weight_map to float32 and ensure it has the right shape
-        weight_map_float32 = tf.cast(weight_map, tf.float32)  # Shape: [512, 512, 1]
+        # Function to convert posmap to 3D point cloud
+        def convert_to_point_cloud(posmap):
+            phi_values = (np.arange(512) / (512 - 1)) * np.pi - np.pi / 2
+            y_max = 512
+            y_min = 0
+            y_values = y_max - (np.arange(512) / (512 - 1)) * (y_max - y_min)
+            phi_grid, y_grid = np.meshgrid(phi_values, y_values)
+            
+            valid_indices = posmap != 0
+            r_flat = posmap[valid_indices]
+            phi_flat = phi_grid[valid_indices]
+            y_flat = y_grid[valid_indices]
+            
+            x = r_flat * np.sin(phi_flat)
+            z = r_flat * np.cos(phi_flat)
+            return np.vstack((x, y_flat, z)).T
 
-        # # Expand dimensions of weight_map to match the batch size
-        weight_map_expanded = tf.expand_dims(weight_map_float32, axis=0)  # Shape: [1, 512, 512, 1]
-        weight_map_batch = tf.tile(weight_map_expanded, [tf.shape(images)[0], 1, 1, 1])  # Shape: [batch_size, 512, 512, 1]
+        # Initialize the NME calculation
+        total_nme = 0
+        count = 0
 
-        # # Apply the weight map to the mse
-        weighted_mse = mse * weight_map_batch
+        for i in tqdm(range(predictions.shape[0]), desc='Validating'):
+            predicted_posmap_norm = predictions[i] / 255.0
+            scale_factor = np.ptp(labels[i])
+            
+            # Convert ground truth and predictions to point clouds
+            reconstructed_gt = convert_to_point_cloud(labels[i])
+            reconstructed_prediction = convert_to_point_cloud(predicted_posmap_norm * scale_factor + labels[i].min())
 
-        # Calculate the mean over the batch
-        v_loss = tf.reduce_mean(weighted_mse)
-        return v_loss
+            # Calculate NME for each posmap in the batch
+            distances = np.sqrt(np.sum((reconstructed_gt - reconstructed_prediction) ** 2, axis=1))
+            nme = np.mean(distances) * 100
+            total_nme += nme
+            count += 1
+
+        # Average NME over the batch
+        avg_nme = total_nme / count if count > 0 else 0
+        return avg_nme
 
     # Early stopping setup
     best_val_loss = float('inf')
@@ -222,7 +246,7 @@ def main(args):
         train_loss = epoch_loss_avg.result()
         val_loss = epoch_val_loss_avg.result()
 
-        print(f"Epoch {epoch+1}, Loss: {train_loss}, Validation Loss: {val_loss}")
+        print(f"Epoch {epoch+1}, Loss: {train_loss}, Validation Avg NME: {val_loss}")
 
         # Append losses to history lists
         training_loss_history.append(train_loss.numpy())
@@ -232,16 +256,16 @@ def main(args):
             best_val_loss = val_loss
             early_stopping_counter = 0
             model.save_weights(os.path.join(best_checkpoint_path, 'best_model'))
-            print(f"Improved Validation Loss: {val_loss}. Best model checkpoint saved.")
+            print(f"Improved Validation Avg NME: {val_loss}. Best model checkpoint saved.")
         else:
             early_stopping_counter += 1
-            print(f"No improvement in Validation Loss for {early_stopping_counter} epoch(s)")
+            print(f"No improvement in Validation Avg NME for {early_stopping_counter} epoch(s)")
             if early_stopping_counter >= early_stopping_patience:
                 print("Early stopping triggered")
                 break
 
         # Checkpointing every epoch
-        model.save_weights(os.path.join(recent_checkpoint_path, f'latest_model'))
+        model.save_weights(os.path.join(recent_checkpoint_path, f'model_epoch_{epoch+1}'))
         print(f"Checkpoint for epoch {epoch+1} saved.")
     
         # Convert the loss history from NumPy float32 to native Python float
@@ -251,7 +275,7 @@ def main(args):
         # Save loss history to a file
         loss_history = {
             'training_loss': training_loss_history,
-            'validation_loss': validation_loss_history
+            'validation_nme': validation_loss_history
         }
         with open('loss_history.json', 'w') as f:
             json.dump(loss_history, f)
@@ -259,7 +283,7 @@ def main(args):
         # Plot loss history
         plt.figure(figsize=(10, 5))
         plt.plot(training_loss_history, label='Training Loss')
-        plt.plot(validation_loss_history, label='Validation Loss')
+        plt.plot(validation_loss_history, label='Validation Avg NME')
         plt.title('Loss History')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
