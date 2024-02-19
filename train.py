@@ -213,11 +213,11 @@ def main(args):
             distances, _ = tree_gt.query(reconstructed_prediction)
             # normalization_factor = np.linalg.norm(labels[i].max() - labels[i].min())
             me = np.mean(distances) # / normalization_factor * 100
-            total_me += me
+            total_nme += me
             count += 1
 
         # Average NME over the batch
-        avg_me = total_me / count if count > 0 else 0
+        avg_me = total_nme / count if count > 0 else 0
         return avg_me
 
     # Early stopping setup
