@@ -10,6 +10,7 @@ import json
 import matplotlib.pyplot as plt
 from datetime import datetime
 from tqdm import tqdm
+from scipy.spatial import cKDTree
 
 class TrainData(object):
     def __init__(self, train_data_file, validation_split=0.2):
@@ -167,10 +168,12 @@ def main(args):
 
     # @tf.function
     def validation_step(images, labels):
-        predictions = model(images, training=False)
-
         # Function to convert posmap to 3D point cloud
         def convert_to_point_cloud(posmap):
+            # Ensure posmap is two-dimensional
+            if posmap.ndim == 3 and posmap.shape[2] == 1:
+                posmap = posmap[:, :, 0]  # Convert 3D tensor to 2D by removing the channel dimension
+
             phi_values = (np.arange(512) / (512 - 1)) * np.pi - np.pi / 2
             y_max = 512
             y_min = 0
@@ -184,9 +187,13 @@ def main(args):
             
             x = r_flat * np.sin(phi_flat)
             z = r_flat * np.cos(phi_flat)
-            return np.vstack((x, y_flat, z)).T
+            point_cloud = np.vstack((x, y_flat, z)).T
+
+            valid_indices = r_flat != 0
+            return point_cloud
 
         # Initialize the NME calculation
+        predictions = model(images, training=False)
         total_nme = 0
         count = 0
 
@@ -198,15 +205,20 @@ def main(args):
             reconstructed_gt = convert_to_point_cloud(labels[i])
             reconstructed_prediction = convert_to_point_cloud(predicted_posmap_norm * scale_factor + labels[i].min())
 
-            # Calculate NME for each posmap in the batch
-            distances = np.sqrt(np.sum((reconstructed_gt - reconstructed_prediction) ** 2, axis=1))
-            nme = np.mean(distances) * 100
-            total_nme += nme
+            # Create KD-Trees for efficient nearest neighbor search
+            tree_gt = cKDTree(reconstructed_gt)
+            tree_pred = cKDTree(reconstructed_prediction)
+
+            # For each point in one cloud, find the nearest in the other
+            distances, _ = tree_gt.query(reconstructed_prediction)
+            # normalization_factor = np.linalg.norm(labels[i].max() - labels[i].min())
+            me = np.mean(distances) # / normalization_factor * 100
+            total_me += me
             count += 1
 
         # Average NME over the batch
-        avg_nme = total_nme / count if count > 0 else 0
-        return avg_nme
+        avg_me = total_me / count if count > 0 else 0
+        return avg_me
 
     # Early stopping setup
     best_val_loss = float('inf')
@@ -295,7 +307,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spherical Position Map Regression Network for Accurate 3D Facial Geometry Estimation')
     parser.add_argument('--train_data_file', default='train_data_file.txt', type=str, help='The training data file')
     parser.add_argument('--learning_rate', default=0.0001, type=float, help='The learning rate')
-    parser.add_argument('--epochs', default=2, type=int, help='Total epochs')
+    parser.add_argument('--epochs', default=100, type=int, help='Total epochs')
     parser.add_argument('--batch_size', default=16, type=int, help='Batch sizes')
     parser.add_argument('--checkpoint', default='checkpoint/', type=str, help='The path of checkpoint')
     parser.add_argument('--model_path', default='checkpoint/resfcn256_weight', type=str, help='The path of pretrained model')
