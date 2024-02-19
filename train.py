@@ -197,7 +197,7 @@ def main(args):
         total_nme = 0
         count = 0
 
-        for i in tqdm(range(predictions.shape[0]), desc='Validating'):
+        for i in range(predictions.shape[0]):
             predicted_posmap_norm = predictions[i] / 255.0
             scale_factor = np.ptp(labels[i])
             
@@ -238,10 +238,10 @@ def main(args):
     validation_loss_history = []
 
     # Perform initial validation before starting the training loop
-    print("Performing initial validation...")
-    initial_val_batch = data(args.batch_size, is_validation=True)
-    initial_val_loss = validation_step(initial_val_batch[0], initial_val_batch[1])
-    print(f"Initial Validation Loss: {initial_val_loss}")
+    # print("Performing initial validation...")
+    # initial_val_batch = data(args.batch_size, is_validation=True)
+    # initial_val_loss = validation_step(initial_val_batch[0], initial_val_batch[1])
+    # print(f"Initial Validation Loss: {initial_val_loss}")
 
     # Training loop
     for epoch in range(args.epochs):
@@ -254,8 +254,9 @@ def main(args):
             loss_value = train_step(batch[0], batch[1])
             epoch_loss_avg.update_state(loss_value)
 
-        # Validation step
-        for _ in range(math.ceil(data.num_validation_data / args.batch_size)):
+        # Validation loop with tqdm progress bar
+        num_validation_steps = math.ceil(data.num_validation_data / args.batch_size)
+        for _ in tqdm(range(num_validation_steps), desc=f'Epoch {epoch+1} Validation'):
             val_batch = data(args.batch_size, is_validation=True)
             val_loss_value = validation_step(val_batch[0], val_batch[1])
             epoch_val_loss_avg.update_state(val_loss_value)
