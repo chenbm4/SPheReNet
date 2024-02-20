@@ -117,6 +117,9 @@ def main(args):
     # Build the model
     model = ResFcn256(256, 512)
 
+    dummy_input = tf.random.normal([1, 256, 256, 3])
+    model(dummy_input)
+
     best_checkpoint_path = os.path.join(args.checkpoint, 'best')
     recent_checkpoint_path = os.path.join(args.checkpoint, 'recent')
 
