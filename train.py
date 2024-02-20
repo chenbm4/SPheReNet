@@ -238,10 +238,10 @@ def main(args):
     validation_loss_history = []
 
     # Perform initial validation before starting the training loop
-    # print("Performing initial validation...")
-    # initial_val_batch = data(args.batch_size, is_validation=True)
-    # initial_val_loss = validation_step(initial_val_batch[0], initial_val_batch[1])
-    # print(f"Initial Validation Loss: {initial_val_loss}")
+    print("Performing initial validation...")
+    initial_val_batch = data(args.batch_size, is_validation=True)
+    initial_val_loss = validation_step(initial_val_batch[0], initial_val_batch[1])
+    print(f"Initial Validation Loss: {initial_val_loss}")
 
     # Training loop
     for epoch in range(args.epochs):
