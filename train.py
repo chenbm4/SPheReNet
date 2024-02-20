@@ -212,7 +212,7 @@ def main(args):
             # For each point in one cloud, find the nearest in the other
             distances, _ = tree_gt.query(reconstructed_prediction)
             # normalization_factor = np.linalg.norm(labels[i].max() - labels[i].min())
-            me = np.mean(distances) # / normalization_factor * 100
+            me = np.mean(distances) * 100 # / normalization_factor
             total_nme += me
             count += 1
 
