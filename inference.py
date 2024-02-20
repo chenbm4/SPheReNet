@@ -60,7 +60,7 @@ def main():
     print(f"Loss for the specific example: {loss.numpy()}")
 
     # Save prediction to file
-    output_filename = args.image_path.rsplit('.', 1)[0] + '_prediction.npy'  # Creates a file name based on the image path
+    output_filename = 'prediction.npy'  # Creates a file name based on the image path
     np.save(output_filename, prediction)
     print(f"Saved prediction to {output_filename}")
 
