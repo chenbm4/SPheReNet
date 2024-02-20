@@ -21,20 +21,15 @@ def infer(model, image_path):
 
 def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Perform inference with a trained model.')
-    parser.add_argument('weights_path', type=str, help='Path to the model weights file.')
+    parser = argparse.ArgumentParser(description='Perform inference with trained models.')
+    parser.add_argument('checkpoint_dir', type=str, help='Path to the checkpoint directory.')
     parser.add_argument('image_path', type=str, help='Path to the image file.')
     args = parser.parse_args()
 
     # Load the model
     model = ResFcn256(256, 512)
 
-    try:
-        model.load_weights(args.weights_path)
-        print("Weights loaded successfully.")
-    except Exception as e:
-        print("An error occurred while loading weights:", e)
-
+    # Load and preprocess label
     label = np.load(args.image_path + '.npz')[list(np.load(args.image_path + '.npz').keys())[0]]
     label = cv2.resize(label, (512, 512))  # Resize label to 512x512
     label = label.reshape((512, 512, 1))
@@ -47,22 +42,32 @@ def main():
     weight_map = np.expand_dims(weight_map, axis=-1)
     weight_map = weight_map / np.max(weight_map)
 
-    # Perform inference
-    prediction = infer(model, args.image_path + '.jpg')
+    # Iterate over each model checkpoint
+    for epoch in range(1, 19):  # Assuming you have 18 epochs
+        checkpoint_prefix = os.path.join(args.checkpoint_dir, f'model_epoch_{epoch}')
+        if not os.path.exists(checkpoint_prefix + '.index'):
+            continue  # Skip if checkpoint does not exist
 
-    # Calculate the loss
-    mse = tf.square(label_array - prediction)
-    weight_map_float32 = tf.cast(weight_map, tf.float32)
-    weighted_mse = mse * weight_map_float32
-    loss = tf.reduce_mean(weighted_mse)
+        # Load model weights
+        model.load_weights(checkpoint_prefix)
+        print(f"Loaded weights from: {checkpoint_prefix}")
 
-    # Print the loss
-    print(f"Loss for the specific example: {loss.numpy()}")
+        # Perform inference
+        prediction = infer(model, args.image_path + '.jpg')
 
-    # Save prediction to file
-    output_filename = 'prediction.npy'  # Creates a file name based on the image path
-    np.save(output_filename, prediction)
-    print(f"Saved prediction to {output_filename}")
+        # Calculate the loss
+        mse = tf.square(label_array - prediction)
+        weight_map_float32 = tf.cast(weight_map, tf.float32)
+        weighted_mse = mse * weight_map_float32
+        loss = tf.reduce_mean(weighted_mse)
+
+        # Print the loss
+        print(f"Loss for epoch {epoch}: {loss.numpy()}")
+
+        # Save prediction to file
+        output_filename = f'prediction_epoch_{epoch}.npy'
+        np.save(output_filename, prediction)
+        print(f"Saved prediction to {output_filename}")
 
 if __name__ == '__main__':
     main()
