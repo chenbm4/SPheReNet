@@ -166,51 +166,58 @@ def main(args):
         return loss
 
 
-    @tf.function
+    # @tf.function
     def validation_step(images, labels):
+        # Function to convert posmap to 3D point cloud
         def convert_to_point_cloud(posmap):
-            # Convert to TensorFlow operations
-            phi_values = tf.linspace(-np.pi / 2, np.pi / 2, 512)
-            y_max = 512.0
-            y_min = 0.0
-            y_values = y_max - tf.linspace(0.0, 1.0, 512) * (y_max - y_min)
-            phi_grid, y_grid = tf.meshgrid(phi_values, y_values)
+            # Ensure posmap is two-dimensional
+            if posmap.ndim == 3 and posmap.shape[2] == 1:
+                posmap = posmap[:, :, 0]  # Convert 3D tensor to 2D by removing the channel dimension
 
-            valid_indices = tf.where(posmap != 0)
-            r_flat = tf.gather_nd(posmap, valid_indices)
-            phi_flat = tf.gather_nd(phi_grid, valid_indices)
-            y_flat = tf.gather_nd(y_grid, valid_indices)
+            phi_values = (np.arange(512) / (512 - 1)) * np.pi - np.pi / 2
+            y_max = 512
+            y_min = 0
+            y_values = y_max - (np.arange(512) / (512 - 1)) * (y_max - y_min)
+            phi_grid, y_grid = np.meshgrid(phi_values, y_values)
+            
+            valid_indices = posmap != 0
+            r_flat = posmap[valid_indices]
+            phi_flat = phi_grid[valid_indices]
+            y_flat = y_grid[valid_indices]
+            
+            x = r_flat * np.sin(phi_flat)
+            z = r_flat * np.cos(phi_flat)
+            point_cloud = np.vstack((x, y_flat, z)).T
 
-            x = r_flat * tf.sin(phi_flat)
-            z = r_flat * tf.cos(phi_flat)
-            point_cloud = tf.stack([x, y_flat[:, 0], z], axis=1)
-
+            valid_indices = r_flat != 0
             return point_cloud
 
         # Initialize the NME calculation
         predictions = model(images, training=False)
-        total_nme = 0.0
+        total_nme = 0
         count = 0
 
         for i in range(predictions.shape[0]):
             true_posmap_norm = labels[i] / 255.0
             predicted_posmap_norm = predictions[i] / 255.0
-            scale_factor = tf.reduce_max(true_posmap_norm) - tf.reduce_min(true_posmap_norm)
+            scale_factor = np.ptp(true_posmap_norm)
             
-            # Convert to point clouds
+            # Convert ground truth and predictions to point clouds
             reconstructed_gt = convert_to_point_cloud(true_posmap_norm)
-            reconstructed_prediction = convert_to_point_cloud(predicted_posmap_norm * scale_factor + tf.reduce_min(labels[i]))
+            reconstructed_prediction = convert_to_point_cloud((predicted_posmap_norm * scale_factor) + labels[i].min())
 
-            # KD-Tree and nearest neighbor search must remain in CPU (SciPy)
-            reconstructed_gt_np = reconstructed_gt.numpy()
-            reconstructed_prediction_np = reconstructed_prediction.numpy()
-            tree_gt = cKDTree(reconstructed_gt_np)
-            distances, _ = tree_gt.query(reconstructed_prediction_np)
-            me = tf.reduce_mean(distances) * 100
+            # Create KD-Trees for efficient nearest neighbor search
+            tree_gt = cKDTree(reconstructed_gt)
+
+            # For each point in one cloud, find the nearest in the other
+            distances, _ = tree_gt.query(reconstructed_prediction)
+            # normalization_factor = np.linalg.norm(labels[i].max() - labels[i].min())
+            me = np.mean(distances) * 100 # / normalization_factor
             total_nme += me
             count += 1
 
-        avg_me = total_nme / tf.cast(count, tf.float32) if count > 0 else 0
+        # Average NME over the batch
+        avg_me = total_nme / count if count > 0 else 0
         return avg_me
 
     # Early stopping setup
