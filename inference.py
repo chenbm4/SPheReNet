@@ -18,7 +18,7 @@ def infer(model, image_path):
     """Perform inference using the model on the given image."""
     processed_img = preprocess_image(image_path)
     predictions = model(processed_img, training=False)  # Get model predictions
-    return predictions
+    return predictions[0]
 
 def convert_to_point_cloud(posmap):
     # Ensure posmap is two-dimensional
@@ -43,34 +43,6 @@ def convert_to_point_cloud(posmap):
     valid_indices = r_flat != 0
     return point_cloud
 
-    # Initialize the NME calculation
-    predictions = model(images, training=False)
-    total_nme = 0
-    count = 0
-
-    for i in range(predictions.shape[0]):
-        true_posmap_norm = labels[i] / 255.0
-        predicted_posmap_norm = predictions[i] / 255.0
-        scale_factor = np.ptp(true_posmap_norm)
-        
-        # Convert ground truth and predictions to point clouds
-        reconstructed_gt = convert_to_point_cloud(true_posmap_norm)
-        reconstructed_prediction = convert_to_point_cloud((predicted_posmap_norm * scale_factor) + true_posmap_norm.min())
-
-        # Create KD-Trees for efficient nearest neighbor search
-        tree_gt = cKDTree(reconstructed_gt)
-
-        # For each point in one cloud, find the nearest in the other
-        distances, _ = tree_gt.query(reconstructed_prediction)
-        normalization_factor = np.linalg.norm(true_posmap_norm.max() - true_posmap_norm.min())
-        me = np.mean(distances) * 100 / normalization_factor
-        total_nme += me
-        count += 1
-
-    # Average NME over the batch
-    avg_me = total_nme / count if count > 0 else 0
-    return avg_me
-
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Perform inference with trained models.')
@@ -88,11 +60,15 @@ def main():
     label_array = np.array(label, dtype=np.float32)
     label_array = label_array / np.max(label_array)
 
+    print(f"Label shape: {label_array.shape}, Max value in label: {np.max(label_array)}, Min value in label: {np.min(label_array)}")
+
     # Load the weight map for the specific image
     weight_map = cv2.imread("model_config/weighted_map.png", cv2.IMREAD_GRAYSCALE)
     weight_map = cv2.resize(weight_map, (512, 512))
     weight_map = np.expand_dims(weight_map, axis=-1)
     weight_map = weight_map / np.max(weight_map)
+
+    print(f"Weight map shape: {weight_map.shape}, Max value in weight map: {np.max(weight_map)}")
 
     # Iterate over each model checkpoint
     for epoch in range(18, 19):  # Assuming you have 18 epochs
@@ -107,14 +83,15 @@ def main():
         # Perform inference
         prediction = infer(model, args.image_path + '.jpg')
 
+        print(f"Prediction shape: {prediction.shape}, Max value in prediction: {np.max(prediction)}, Min value in prediction: {np.min(prediction)}")
+
         # Calculate the loss
         mse = tf.square(label_array - prediction)
         weight_map_float32 = tf.cast(weight_map, tf.float32)
         weighted_mse = mse * weight_map_float32
         loss = tf.reduce_mean(weighted_mse)
 
-        # for i in range(predictions.shape[0]):
-        true_posmap_norm = prediction / 255.0
+        true_posmap_norm = label_array / 255.0
         predicted_posmap_norm = prediction / 255.0
         scale_factor = np.ptp(true_posmap_norm)
         
@@ -128,13 +105,19 @@ def main():
         # For each point in one cloud, find the nearest in the other
         distances, _ = tree_gt.query(reconstructed_prediction)
         normalization_factor = np.linalg.norm(true_posmap_norm.max() - true_posmap_norm.min())
-        me = np.mean(distances) * 100 / normalization_factor
+
+        print(f"True posmap norm shape: {true_posmap_norm.shape}, Max value: {np.max(true_posmap_norm)}, Min value: {np.min(true_posmap_norm)}")
+        print(f"Predicted posmap norm shape: {predicted_posmap_norm.shape}, Max value: {np.max(predicted_posmap_norm)}, Min value: {np.min(predicted_posmap_norm)}")
+        print(f"Scale factor: {scale_factor}")
+        print(f"Normalization factor: {normalization_factor}")
+        
+        nme = np.mean(distances) * 100 / normalization_factor
 
         # Print the loss
         print(f"Loss for epoch {epoch}: {loss.numpy()}")
 
         # Print validation error
-        print(f"Validation error for epoch {epoch}: {me}")
+        print(f"Validation error for epoch {epoch}: {nme}")
 
         # Save prediction to file
         output_filename = f'{args.image_path}_prediction.npy'
