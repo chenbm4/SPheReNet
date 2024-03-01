@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import os
 from prnet import ResFcn256  # Import your model definition
+from scipy.spatial import cKDTree
 
 def preprocess_image(image_path):
     """Preprocess the input image."""
@@ -18,6 +19,57 @@ def infer(model, image_path):
     processed_img = preprocess_image(image_path)
     predictions = model(processed_img, training=False)  # Get model predictions
     return predictions
+
+def convert_to_point_cloud(posmap):
+    # Ensure posmap is two-dimensional
+    if posmap.ndim == 3 and posmap.shape[2] == 1:
+        posmap = posmap[:, :, 0]  # Convert 3D tensor to 2D by removing the channel dimension
+
+    phi_values = (np.arange(512) / (512 - 1)) * np.pi - np.pi / 2
+    y_max = 512
+    y_min = 0
+    y_values = y_max - (np.arange(512) / (512 - 1)) * (y_max - y_min)
+    phi_grid, y_grid = np.meshgrid(phi_values, y_values)
+    
+    valid_indices = posmap != 0
+    r_flat = posmap[valid_indices]
+    phi_flat = phi_grid[valid_indices]
+    y_flat = y_grid[valid_indices]
+    
+    x = r_flat * np.sin(phi_flat)
+    z = r_flat * np.cos(phi_flat)
+    point_cloud = np.vstack((x, y_flat, z)).T
+
+    valid_indices = r_flat != 0
+    return point_cloud
+
+    # Initialize the NME calculation
+    predictions = model(images, training=False)
+    total_nme = 0
+    count = 0
+
+    for i in range(predictions.shape[0]):
+        true_posmap_norm = labels[i] / 255.0
+        predicted_posmap_norm = predictions[i] / 255.0
+        scale_factor = np.ptp(true_posmap_norm)
+        
+        # Convert ground truth and predictions to point clouds
+        reconstructed_gt = convert_to_point_cloud(true_posmap_norm)
+        reconstructed_prediction = convert_to_point_cloud((predicted_posmap_norm * scale_factor) + true_posmap_norm.min())
+
+        # Create KD-Trees for efficient nearest neighbor search
+        tree_gt = cKDTree(reconstructed_gt)
+
+        # For each point in one cloud, find the nearest in the other
+        distances, _ = tree_gt.query(reconstructed_prediction)
+        normalization_factor = np.linalg.norm(true_posmap_norm.max() - true_posmap_norm.min())
+        me = np.mean(distances) * 100 / normalization_factor
+        total_nme += me
+        count += 1
+
+    # Average NME over the batch
+    avg_me = total_nme / count if count > 0 else 0
+    return avg_me
 
 def main():
     # Parse command line arguments
@@ -43,7 +95,7 @@ def main():
     weight_map = weight_map / np.max(weight_map)
 
     # Iterate over each model checkpoint
-    for epoch in range(1, 19):  # Assuming you have 18 epochs
+    for epoch in range(18, 19):  # Assuming you have 18 epochs
         checkpoint_prefix = os.path.join(args.checkpoint_dir, f'model_epoch_{epoch}')
         if not os.path.exists(checkpoint_prefix + '.index'):
             continue  # Skip if checkpoint does not exist
@@ -61,11 +113,31 @@ def main():
         weighted_mse = mse * weight_map_float32
         loss = tf.reduce_mean(weighted_mse)
 
+        # for i in range(predictions.shape[0]):
+        true_posmap_norm = prediction / 255.0
+        predicted_posmap_norm = prediction / 255.0
+        scale_factor = np.ptp(true_posmap_norm)
+        
+        # Convert ground truth and predictions to point clouds
+        reconstructed_gt = convert_to_point_cloud(true_posmap_norm)
+        reconstructed_prediction = convert_to_point_cloud((predicted_posmap_norm * scale_factor) + true_posmap_norm.min())
+
+        # Create KD-Trees for efficient nearest neighbor search
+        tree_gt = cKDTree(reconstructed_gt)
+
+        # For each point in one cloud, find the nearest in the other
+        distances, _ = tree_gt.query(reconstructed_prediction)
+        normalization_factor = np.linalg.norm(true_posmap_norm.max() - true_posmap_norm.min())
+        me = np.mean(distances) * 100 / normalization_factor
+
         # Print the loss
         print(f"Loss for epoch {epoch}: {loss.numpy()}")
 
+        # Print validation error
+        print(f"Validation error for epoch {epoch}: {me}")
+
         # Save prediction to file
-        output_filename = f'prediction_epoch_{epoch}.npy'
+        output_filename = f'{args.image_path}_prediction.npy'
         np.save(output_filename, prediction)
         print(f"Saved prediction to {output_filename}")
 
