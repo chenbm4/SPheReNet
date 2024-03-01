@@ -204,23 +204,17 @@ def main(args):
         for i in range(predictions.shape[0]):
             true_posmap = labels[i]
             predicted_posmap = predictions[i]
-            scale_factor = np.ptp(true_posmap)
             
             # Convert ground truth and predictions to point clouds
             reconstructed_gt = convert_to_point_cloud(true_posmap)
-            reconstructed_prediction = convert_to_point_cloud((predicted_posmap * scale_factor) + true_posmap.min())
+            reconstructed_prediction = convert_to_point_cloud(predicted_posmap)
 
             # Create KD-Trees for efficient nearest neighbor search
             tree_gt = cKDTree(reconstructed_gt)
 
             # For each point in one cloud, find the nearest in the other
             distances, _ = tree_gt.query(reconstructed_prediction)
-            normalization_factor = np.linalg.norm(true_posmap.max() - true_posmap.min())
-            print(f"True posmap norm shape: {true_posmap.shape}, Max value: {np.max(true_posmap)}, Min value: {np.min(true_posmap)}")
-            print(f"Predicted posmap norm shape: {predicted_posmap.shape}, Max value: {np.max(predicted_posmap)}, Min value: {np.min(predicted_posmap)}")
-            print(f"Scale factor: {scale_factor}")
-            print(f"Normalization factor: {normalization_factor}")
-            me = np.mean(distances) * 100 / normalization_factor
+            me = np.mean(distances) * 100
             total_nme += me
             count += 1
 
