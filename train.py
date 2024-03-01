@@ -70,6 +70,7 @@ class TrainData(object):
                 img_array = np.array(img, dtype=np.float32) / 256.0 / 1.1
                 label_array = np.array(label, dtype=np.float32)
                 label_array = label_array / np.max(label_array)  # Normalize to 0 to 1 values
+                # print(f"Label shape: {label_array.shape}, Max value in label: {np.max(label_array)}, Min value in label: {np.min(label_array)}")
 
                 imgs.append(img_array)
                 labels.append(label_array)
@@ -201,20 +202,24 @@ def main(args):
         count = 0
 
         for i in range(predictions.shape[0]):
-            true_posmap_norm = labels[i] / 255.0
-            predicted_posmap_norm = predictions[i] / 255.0
-            scale_factor = np.ptp(true_posmap_norm)
+            true_posmap = labels[i]
+            predicted_posmap = predictions[i]
+            scale_factor = np.ptp(true_posmap)
             
             # Convert ground truth and predictions to point clouds
-            reconstructed_gt = convert_to_point_cloud(true_posmap_norm)
-            reconstructed_prediction = convert_to_point_cloud((predicted_posmap_norm * scale_factor) + true_posmap_norm.min())
+            reconstructed_gt = convert_to_point_cloud(true_posmap)
+            reconstructed_prediction = convert_to_point_cloud((predicted_posmap * scale_factor) + true_posmap.min())
 
             # Create KD-Trees for efficient nearest neighbor search
             tree_gt = cKDTree(reconstructed_gt)
 
             # For each point in one cloud, find the nearest in the other
             distances, _ = tree_gt.query(reconstructed_prediction)
-            normalization_factor = np.linalg.norm(true_posmap_norm.max() - true_posmap_norm.min())
+            normalization_factor = np.linalg.norm(true_posmap.max() - true_posmap.min())
+            print(f"True posmap norm shape: {true_posmap.shape}, Max value: {np.max(true_posmap)}, Min value: {np.min(true_posmap)}")
+            print(f"Predicted posmap norm shape: {predicted_posmap.shape}, Max value: {np.max(predicted_posmap)}, Min value: {np.min(predicted_posmap)}")
+            print(f"Scale factor: {scale_factor}")
+            print(f"Normalization factor: {normalization_factor}")
             me = np.mean(distances) * 100 / normalization_factor
             total_nme += me
             count += 1
