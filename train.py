@@ -230,7 +230,7 @@ def main(args):
 
     # Early stopping setup
     best_val_loss = float('inf')
-    early_stopping_patience = 5
+    early_stopping_patience = 10
     early_stopping_counter = 0
 
     # Learning rate decay
