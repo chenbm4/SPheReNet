@@ -7,6 +7,7 @@ import random
 from prnet import ResFcn256 # Ensure this is compatible with TensorFlow 2.x
 import math
 import json
+import re
 import matplotlib.pyplot as plt
 from datetime import datetime
 from tqdm import tqdm
@@ -124,10 +125,15 @@ def main(args):
     best_checkpoint_path = os.path.join(args.checkpoint, 'best')
     recent_checkpoint_path = os.path.join(args.checkpoint, 'recent')
 
-    # Load weights if they exist
-    if os.path.exists(recent_checkpoint_path):
-        model.load_weights(recent_checkpoint_path)
-        print(f"Loaded weights from the most recent checkpoint: {recent_checkpoint_path}")
+    # Find the most recent checkpoint file based on the epoch number
+    checkpoint_files = os.listdir(recent_checkpoint_path)
+    epoch_numbers = [int(re.search(r'model_epoch_(\d+)', file).group(1)) for file in checkpoint_files if re.search(r'model_epoch_(\d+)', file)]
+    if epoch_numbers:
+        highest_epoch = max(epoch_numbers)
+        latest_checkpoint_file = f'model_epoch_{highest_epoch}'
+        latest_checkpoint_path = os.path.join(recent_checkpoint_path, latest_checkpoint_file)
+        model.load_weights(latest_checkpoint_path)
+        print(f"Loaded weights from the most recent checkpoint: {latest_checkpoint_path}")
     else:
         print("No recent checkpoint found. Starting training from scratch.")
 
