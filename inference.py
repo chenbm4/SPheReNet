@@ -112,7 +112,7 @@ def main():
         
         # Convert ground truth and predictions to point clouds
         reconstructed_gt = convert_to_point_cloud(label_array)
-        reconstructed_prediction = convert_to_point_cloud(prediction)
+        reconstructed_prediction = convert_to_point_cloud(prediction[0])
 
         # Create KD-Trees for efficient nearest neighbor search
         tree_gt = cKDTree(reconstructed_gt)
