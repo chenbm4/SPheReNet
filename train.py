@@ -241,17 +241,17 @@ def main(args):
 
     # Early stopping setup
     best_val_loss = float('inf')
-    early_stopping_patience = 10
+    early_stopping_patience = 20
     early_stopping_counter = 0
 
     # Learning rate decay
-    initial_learning_rate = args.learning_rate
-    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate,
-        decay_steps=5*math.ceil(data.num_data / args.batch_size),
-        decay_rate=0.9,
-        staircase=True)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+    # initial_learning_rate = args.learning_rate
+    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+    #     initial_learning_rate,
+    #     decay_steps=5*math.ceil(data.num_data / args.batch_size),
+    #     decay_rate=0.9,
+    #     staircase=True)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
 
     training_loss_history = []
     validation_loss_history = []
