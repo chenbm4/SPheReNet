@@ -3,22 +3,23 @@ import tensorflow as tf
 import cv2
 import numpy as np
 import os
-from prnet import ResFcn256  # Import your model definition
+import re
+from prnet import ResFcn256
 from scipy.spatial import cKDTree
 
 def preprocess_image(image_path):
     """Preprocess the input image."""
     img = cv2.imread(image_path)
-    img = cv2.resize(img, (256, 256))  # Resize to the expected input size
+    img = cv2.resize(img, (256, 256))
     img = np.array(img, dtype=np.float32) / 256.0 / 1.1
-    img = np.expand_dims(img, axis=0)  # Add batch dimension
+    img = np.expand_dims(img, axis=0)
     return img
 
 def infer(model, image_path):
     """Perform inference using the model on the given image."""
     processed_img = preprocess_image(image_path)
     predictions = model(processed_img, training=False)  # Get model predictions
-    return predictions[0]
+    return predictions
 
 def convert_to_point_cloud(posmap):
     # Ensure posmap is two-dimensional
@@ -42,6 +43,14 @@ def convert_to_point_cloud(posmap):
 
     valid_indices = r_flat != 0
     return point_cloud
+
+def get_epochs_from_checkpoints(checkpoint_dir):
+    epochs = []
+    for filename in os.listdir(checkpoint_dir):
+        match = re.match(r'model_epoch_(\d+).index', filename)
+        if match:
+            epochs.append(int(match.group(1)))
+    return epochs
 
 def main():
     # Parse command line arguments
@@ -70,8 +79,14 @@ def main():
 
     print(f"Weight map shape: {weight_map.shape}, Max value in weight map: {np.max(weight_map)}")
 
+    predictions_folder = 'predictions' # Create a folder to store predictions
+    os.makedirs(predictions_folder, exist_ok=True)
+
+    # Get the list of epochs from checkpoint files
+    epochs = get_epochs_from_checkpoints(args.checkpoint_dir)
+
     # Iterate over each model checkpoint
-    for epoch in range(18, 19):  # Assuming you have 18 epochs
+    for epoch in epochs:  # Assuming you have 18 epochs
         checkpoint_prefix = os.path.join(args.checkpoint_dir, f'model_epoch_{epoch}')
         if not os.path.exists(checkpoint_prefix + '.index'):
             continue  # Skip if checkpoint does not exist
@@ -91,27 +106,21 @@ def main():
         weighted_mse = mse * weight_map_float32
         loss = tf.reduce_mean(weighted_mse)
 
-        true_posmap_norm = label_array / 255.0
-        predicted_posmap_norm = prediction / 255.0
-        scale_factor = np.ptp(true_posmap_norm)
+        # true_posmap_norm = label_array / 255.0
+        # predicted_posmap_norm = prediction / 255.0
+        # scale_factor = np.ptp(true_posmap_norm)
         
         # Convert ground truth and predictions to point clouds
-        reconstructed_gt = convert_to_point_cloud(true_posmap_norm)
-        reconstructed_prediction = convert_to_point_cloud((predicted_posmap_norm * scale_factor) + true_posmap_norm.min())
+        reconstructed_gt = convert_to_point_cloud(label_array)
+        reconstructed_prediction = convert_to_point_cloud(prediction)
 
         # Create KD-Trees for efficient nearest neighbor search
         tree_gt = cKDTree(reconstructed_gt)
 
         # For each point in one cloud, find the nearest in the other
         distances, _ = tree_gt.query(reconstructed_prediction)
-        normalization_factor = np.linalg.norm(true_posmap_norm.max() - true_posmap_norm.min())
 
-        print(f"True posmap norm shape: {true_posmap_norm.shape}, Max value: {np.max(true_posmap_norm)}, Min value: {np.min(true_posmap_norm)}")
-        print(f"Predicted posmap norm shape: {predicted_posmap_norm.shape}, Max value: {np.max(predicted_posmap_norm)}, Min value: {np.min(predicted_posmap_norm)}")
-        print(f"Scale factor: {scale_factor}")
-        print(f"Normalization factor: {normalization_factor}")
-        
-        nme = np.mean(distances) * 100 / normalization_factor
+        nme = np.mean(distances) * 100
 
         # Print the loss
         print(f"Loss for epoch {epoch}: {loss.numpy()}")
@@ -120,9 +129,15 @@ def main():
         print(f"Validation error for epoch {epoch}: {nme}")
 
         # Save prediction to file
-        output_filename = f'{args.image_path}_prediction.npy'
+        output_filename = os.path.join(predictions_folder, f'epoch_{epoch}_prediction.npy')
         np.save(output_filename, prediction)
         print(f"Saved prediction to {output_filename}")
+
+    input_image = cv2.imread(args.image_path + '.jpg')
+    target_image = label_array * 255
+    cv2.imwrite(os.path.join(predictions_folder, 'target_image.png'), target_image)
+    cv2.imwrite(os.path.join(predictions_folder, 'input_image.png'), input_image)
+    print(f"Saved input and target images to {predictions_folder}")
 
 if __name__ == '__main__':
     main()
