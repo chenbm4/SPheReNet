@@ -21,13 +21,10 @@ class ResBlock(tf.keras.layers.Layer):
     def call(self, x, training=False):
         shortcut = self.shortcut_conv(x) if self.stride != 1 or x.shape[-1] != self.num_outputs else x
         x = self.conv1(x)
-        x = self.activation_fn(self.batch_norm(x, training=training))
         x = self.conv2(x)
-        x = self.activation_fn(self.batch_norm(x, training=training))
         x = self.conv3(x)
-        x = self.batch_norm(x, training=training)  # No activation after this layer
         x = x + shortcut
-        return self.activation_fn(x)
+        return self.activation_fn(self.batch_norm(x, training=training))
 
 class ResFcn256(tf.keras.Model):
     def __init__(self, resolution_inp=256, resolution_op=512, channel=3, l2_value=0.0002):
@@ -35,7 +32,6 @@ class ResFcn256(tf.keras.Model):
         size = 16
         l2_regularizer = tf.keras.regularizers.l2(l2_value)
         self.initial_conv = tf.keras.layers.Conv2D(size, kernel_size=4, strides=1, padding='SAME', kernel_regularizer=l2_regularizer)
-        self.initial_batch_norm = tf.keras.layers.BatchNormalization()
 
         self.res_blocks = [
             ResBlock(size * 2, kernel_size=4, stride=2, l2_value=l2_value),
@@ -72,16 +68,11 @@ class ResFcn256(tf.keras.Model):
             tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME', kernel_regularizer=l2_regularizer, activation='sigmoid')
         ]
 
-        self.upconv_batch_norms = [tf.keras.layers.BatchNormalization() for _ in self.upconvs[:-1]]
-
     def call(self, x, training=False):
         x = self.initial_conv(x)
-        x = self.initial_batch_norm(x, training=training)
         for res_block in self.res_blocks:
             x = res_block(x, training=training)
-        for upconv, batch_norm in zip(self.upconvs[:-1], self.upconv_batch_norms):
+        for upconv in self.upconvs:
             x = upconv(x)
-            x = batch_norm(x, training=training)
-        x = self.upconvs[-1](x)
         return x
     
