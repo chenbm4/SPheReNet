@@ -55,7 +55,7 @@ def get_epochs_from_checkpoints(checkpoint_dir):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Perform inference with trained models.')
-    parser.add_argument('checkpoint_dir', type=str, help='Path to the checkpoint directory.')
+    parser.add_argument('weights_path', type=str, help='Path to the checkpoint directory.')
     parser.add_argument('image_path', type=str, help='Path to the image file.')
     args = parser.parse_args()
 
