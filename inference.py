@@ -79,65 +79,37 @@ def main():
 
     print(f"Weight map shape: {weight_map.shape}, Max value in weight map: {np.max(weight_map)}")
 
-    predictions_folder = 'predictions' # Create a folder to store predictions
-    os.makedirs(predictions_folder, exist_ok=True)
+    # Load model weights
+    try:
+        model.load_weights(args.weights_path)
+        print(f"Loaded weights from: {args.weights_path}")
+    except Exception as e:
+        print("Error loading weights:", e)
+        return
 
-    # Get the list of epochs from checkpoint files
-    epochs = get_epochs_from_checkpoints(args.checkpoint_dir)
+    prediction = infer(model, args.image_path)
 
-    # Iterate over each model checkpoint
-    for epoch in epochs:  # Assuming you have 18 epochs
-        checkpoint_prefix = os.path.join(args.checkpoint_dir, f'model_epoch_{epoch}')
-        if not os.path.exists(checkpoint_prefix + '.index'):
-            continue  # Skip if checkpoint does not exist
+    mse = tf.square(label_array - prediction)
+    weight_map_float32 = tf.cast(weight_map, dtype=tf.float32)
+    weighted_mse = tf.multiply(mse, weight_map_float32)
+    loss = tf.reduce_mean(weighted_mse)
 
-        # Load model weights
-        model.load_weights(checkpoint_prefix)
-        print(f"Loaded weights from: {checkpoint_prefix}")
+    reconstructed_gt = convert_to_point_cloud(label_array)
+    reconstructed_prediction = convert_to_point_cloud(prediction[0])
+    tree_gt = cKDTree(reconstructed_gt)
 
-        # Perform inference
-        prediction = infer(model, args.image_path + '.jpg')
+    distances, _ = tree_gt.query(reconstructed_prediction)
 
-        print(f"Prediction shape: {prediction.shape}, Max value in prediction: {np.max(prediction)}, Min value in prediction: {np.min(prediction)}")
+    nme = np.mean(distances)
 
-        # Calculate the loss
-        mse = tf.square(label_array - prediction)
-        weight_map_float32 = tf.cast(weight_map, tf.float32)
-        weighted_mse = mse * weight_map_float32
-        loss = tf.reduce_mean(weighted_mse)
+    print(f"Loss: {loss}")
+    print(f"Validaiton NME%: {nme * 100}")
 
-        # true_posmap_norm = label_array / 255.0
-        # predicted_posmap_norm = prediction / 255.0
-        # scale_factor = np.ptp(true_posmap_norm)
-        
-        # Convert ground truth and predictions to point clouds
-        reconstructed_gt = convert_to_point_cloud(label_array)
-        reconstructed_prediction = convert_to_point_cloud(prediction[0])
-
-        # Create KD-Trees for efficient nearest neighbor search
-        tree_gt = cKDTree(reconstructed_gt)
-
-        # For each point in one cloud, find the nearest in the other
-        distances, _ = tree_gt.query(reconstructed_prediction)
-
-        nme = np.mean(distances) * 100
-
-        # Print the loss
-        print(f"Loss for epoch {epoch}: {loss.numpy()}")
-
-        # Print validation error
-        print(f"Validation error for epoch {epoch}: {nme}")
-
-        # Save prediction to file
-        output_filename = os.path.join(predictions_folder, f'epoch_{epoch}_prediction.npy')
-        np.save(output_filename, prediction)
-        print(f"Saved prediction to {output_filename}")
-
-    input_image = cv2.imread(args.image_path + '.jpg')
-    target_image = label_array * 255
-    cv2.imwrite(os.path.join(predictions_folder, 'target_image.png'), target_image)
-    cv2.imwrite(os.path.join(predictions_folder, 'input_image.png'), input_image)
-    print(f"Saved input and target images to {predictions_folder}")
+    # Save the results
+    output_filename = os.path.join('predictions', f'{args.image_path.split("/")[-1]}_prediction.npy')
+    os.makedirs('predictions', exist_ok=True)
+    np.save(output_filename, prediction)
+    print(f'Saved prediction to {output_filename}.')
 
 if __name__ == '__main__':
     main()
