@@ -44,14 +44,6 @@ def convert_to_point_cloud(posmap):
     valid_indices = r_flat != 0
     return point_cloud
 
-def get_epochs_from_checkpoints(checkpoint_dir):
-    epochs = []
-    for filename in os.listdir(checkpoint_dir):
-        match = re.match(r'model_epoch_(\d+).index', filename)
-        if match:
-            epochs.append(int(match.group(1)))
-    return epochs
-
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Perform inference with trained models.')
@@ -61,6 +53,12 @@ def main():
 
     # Load the model
     model = ResFcn256(256, 512)
+
+    try:
+        model.load_weights(args.weights_path)
+        print("Weights loaded successfully.")
+    except Exception as e:
+        print("An error occurred while loading weights:", e)
 
     # Load and preprocess label
     label = np.load(args.image_path + '.npz')[list(np.load(args.image_path + '.npz').keys())[0]]
@@ -79,15 +77,7 @@ def main():
 
     print(f"Weight map shape: {weight_map.shape}, Max value in weight map: {np.max(weight_map)}")
 
-    # Load model weights
-    try:
-        model.load_weights(args.weights_path)
-        print(f"Loaded weights from: {args.weights_path}")
-    except Exception as e:
-        print("Error loading weights:", e)
-        return
-
-    prediction = infer(model, args.image_path)
+    prediction = infer(model, args.image_path + '.jpg')
 
     mse = tf.square(label_array - prediction)
     weight_map_float32 = tf.cast(weight_map, dtype=tf.float32)
